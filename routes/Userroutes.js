@@ -1,0 +1,147 @@
+import express from 'express';
+import User from '../Schema/User.js';   
+import Seller from '../Schema/Seller.js'; 
+import bcrypt from 'bcrypt';
+import nodemailer from 'nodemailer';
+import jwt from 'jsonwebtoken';
+import auth from '../middleware/Auth.js';
+import crypto from 'crypto';
+
+const SECRET = 'superkey';
+const router = express.Router();
+
+// 1. Signup
+router.post('/signup', async (req, res) => {
+    const { name, email, password, role, SellerName } = req.body; 
+
+    if (role === 'seller') {
+        const sellerExist = await Seller.findOne({ email });
+        if (sellerExist) return res.status(400).json({ msg: "Seller Already Exist" });
+        const hashpass = await bcrypt.hash(password, 10);
+        await Seller.create({ SellerName, email, password: hashpass }); 
+        res.json({ msg: "Seller Registered Successfully" });
+    } 
+    // ...
+});
+
+// 2. Login
+router.post("/login", async (req, res) => {
+    const { email, password, role } = req.body;
+    let user;
+
+    if (role === 'seller') {
+        user = await Seller.findOne({ email });
+    } else {
+        user = await User.findOne({ email });
+    }
+
+    if (!user) return res.status(400).json({ msg: "Account not found" });
+
+    const ismatch = await bcrypt.compare(password, user.password);
+    if (!ismatch) return res.status(401).json({ msg: "Incorrect Password" });
+
+    const token = jwt.sign(
+        { id: user._id, email: user.email, role: role },
+        SECRET,
+        { expiresIn: "1h" }
+    );
+    res.json({ 
+        msg: "Login Successful", 
+        token, 
+        email: user.email, 
+        userId: user._id,
+        role: role 
+    });
+});
+
+// 3. Forgot Password
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'krishpaliwal34@gmail.com',
+        pass: 'yqrg lpye iukr bxuu'
+    }
+});
+
+router.post('/forgot-password', async (req, res) => {
+    const { email, role } = req.body;
+    const Model = role === 'seller' ? Seller : User;
+    const foundUser = await Model.findOne({ email });
+    if (!foundUser) return res.status(404).json({ msg: "User Not Found" });
+
+    const ResetToken = crypto.randomBytes(32).toString('hex');
+    foundUser.resetToken = ResetToken;
+    foundUser.resetTokenExpiry = Date.now() + 3600000;
+    await foundUser.save();
+
+    const mailOptions = {
+        from: 'krishpaliwal34@gmail.com',
+        to: email,
+        subject: 'Password Reset Request',
+        text: `Click here to reset your password: http://localhost:3000/reset-password/${ResetToken}`
+    };
+
+    transporter.sendMail(mailOptions, (error, info) => {
+        if (error) return res.status(500).json({ msg: "Email Error" });
+        res.json({ msg: "Password Reset Link Has Been Sent" });
+    });
+});
+
+// 4. Reset Password
+router.post('/reset-password/:token', async (req, res) => {
+    const { token } = req.params;
+    const { password, role } = req.body;
+    const Model = role === 'seller' ? Seller : User;
+    const user = await Model.findOne({ resetToken: token, resetTokenExpiry: { $gt: Date.now() } });
+    if (!user) return res.status(400).json({ msg: "Token Invalid or Expired" });
+
+    user.password = await bcrypt.hash(password, 10);
+    user.resetToken = undefined;
+    user.resetTokenExpiry = undefined;
+    await user.save();
+    res.json({ msg: "Password Updated Successfully" });
+});
+
+// 5. Upload Avatar
+router.post("/upload-avatar", async (req, res) => {
+    try {
+        const { userId, imageBase64, role } = req.body;
+        const Model = role === 'seller' ? Seller : User;
+        await Model.findByIdAndUpdate(userId, { profilePic: imageBase64 });
+        res.json({ message: "Image saved!" });
+    } catch (err) {
+        res.status(500).json({ message: "Server Error" });
+    }
+});
+
+// 6. Update Profile Name
+router.put("/update-profile", async (req, res) => {
+    try {
+        const { userId, name, role } = req.body;
+        
+        if (role === 'seller') {
+            await Seller.findByIdAndUpdate(userId, { SellerName: name });
+        } else {
+            await User.findByIdAndUpdate(userId, { name });
+        }
+        res.json({ message: "Updated successfully!" });
+    } catch (err) {
+        res.status(500).json({ message: "Server Error" });
+    }
+});
+// 8. Dashboard राउट
+router.get("/dashboard", auth, async (req, res) => {
+    try {
+        const Model = req.user.role === 'seller' ? Seller : User;
+        const user = await Model.findById(req.user.id);
+        res.json({
+            name: req.user.role === 'seller' ? user.SellerName : user.name, 
+            profilePic: user.profilePic || "",
+            role: req.user.role
+        });
+    } catch (err) {
+        res.status(500).json({ message: "Error" });
+    }
+});
+
+export default router;
