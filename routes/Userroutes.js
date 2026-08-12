@@ -11,17 +11,85 @@ const SECRET = 'superkey';
 const router = express.Router();
 
 // 1. Signup
+// 1. Signup
 router.post('/signup', async (req, res) => {
-    const { name, email, password, role, SellerName } = req.body; 
+  try {
+    const { name, email, password, role, SellerName } = req.body;
 
-    if (role === 'seller') {
-        const sellerExist = await Seller.findOne({ email });
-        if (sellerExist) return res.status(400).json({ msg: "Seller Already Exist" });
-        const hashpass = await bcrypt.hash(password, 10);
-        await Seller.create({ SellerName, email, password: hashpass }); 
-        res.json({ msg: "Seller Registered Successfully" });
-    } 
-    // ...
+    if (!email || !password || !role) {
+      return res.status(400).json({
+        msg: "Email, password and role are required",
+      });
+    }
+
+    // =========================
+    // SELLER SIGNUP
+    // =========================
+    if (role === "seller") {
+      if (!SellerName) {
+        return res.status(400).json({
+          msg: "Seller Name is required",
+        });
+      }
+
+      const sellerExist = await Seller.findOne({ email });
+
+      if (sellerExist) {
+        return res.status(400).json({
+          msg: "Seller Already Exist",
+        });
+      }
+
+      const hashpass = await bcrypt.hash(password, 10);
+
+      await Seller.create({
+        SellerName,
+        email,
+        password: hashpass,
+      });
+
+      return res.status(201).json({
+        msg: "Seller Registered Successfully",
+      });
+    }
+
+    // =========================
+    // USER SIGNUP
+    // =========================
+    const userExist = await User.findOne({ email });
+
+    if (userExist) {
+      return res.status(400).json({
+        msg: "User Already Exist",
+      });
+    }
+
+    if (!name) {
+      return res.status(400).json({
+        msg: "Name is required",
+      });
+    }
+
+    const hashpass = await bcrypt.hash(password, 10);
+
+    await User.create({
+      name,
+      email,
+      password: hashpass,
+    });
+
+    return res.status(201).json({
+      msg: "User Registered Successfully",
+    });
+
+  } catch (error) {
+    console.error("Signup Error:", error);
+
+    return res.status(500).json({
+      msg: "Signup failed",
+      error: error.message,
+    });
+  }
 });
 
 // 2. Login
