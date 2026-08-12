@@ -20,7 +20,7 @@ app.use(express.urlencoded({
   extended: true
 }))
 
-connectDB()
+await connectDB();
 
 // API ROUTES
 app.use("/api/order", Orderroutes)
@@ -32,6 +32,7 @@ app.use("/api/dashproducts", ProductRoutes)
 
 // RAZORPAY PAYMENT
 app.use("/api/payment", Paymentroutes)
+
 
 // Vercel ke liye app export
 export default app
