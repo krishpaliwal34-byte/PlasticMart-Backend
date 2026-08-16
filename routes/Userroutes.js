@@ -173,6 +173,8 @@ router.post("/forgot-password", async (req, res) => {
 
     return res.status(500).json({
       msg: "Email Error",
+      error: error.message,
+    code: error.code || null,
     });
   }
 });
