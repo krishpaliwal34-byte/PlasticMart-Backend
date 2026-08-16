@@ -124,35 +124,57 @@ router.post("/login", async (req, res) => {
 
 // 3. Forgot Password
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: 'krishpaliwal34@gmail.com',
-        pass: 'yqrg lpye iukr bxuu'
-    }
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
 });
 
-router.post('/forgot-password', async (req, res) => {
+router.post("/forgot-password", async (req, res) => {
+  try {
     const { email, role } = req.body;
-    const Model = role === 'seller' ? Seller : User;
-    const foundUser = await Model.findOne({ email });
-    if (!foundUser) return res.status(404).json({ msg: "User Not Found" });
 
-    const ResetToken = crypto.randomBytes(32).toString('hex');
+    const Model = role === "seller" ? Seller : User;
+
+    const foundUser = await Model.findOne({ email });
+
+    if (!foundUser) {
+      return res.status(404).json({
+        msg: "User Not Found",
+      });
+    }
+
+    const ResetToken = crypto.randomBytes(32).toString("hex");
+
     foundUser.resetToken = ResetToken;
-    foundUser.resetTokenExpiry = Date.now() + 3600000;
+    foundUser.resetTokenExpiry = new Date(Date.now() + 3600000);
+
     await foundUser.save();
 
+    const resetLink =
+        `https://plastic-mart-frontend.vercel.app/reset-password/${ResetToken}`;;
+
     const mailOptions = {
-        from: 'krishpaliwal34@gmail.com',
-        to: email,
-        subject: 'Password Reset Request',
-        text: `Click here to reset your password: http://localhost:3000/reset-password/${ResetToken}`
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "PlasticMart Password Reset",
+      text: `Click here to reset your password: ${resetLink}`,
     };
 
-    transporter.sendMail(mailOptions, (error, info) => {
-        if (error) return res.status(500).json({ msg: "Email Error" });
-        res.json({ msg: "Password Reset Link Has Been Sent" });
+    await transporter.sendMail(mailOptions);
+
+    return res.status(200).json({
+      msg: "Password Reset Link Has Been Sent",
     });
+
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+
+    return res.status(500).json({
+      msg: "Email Error",
+    });
+  }
 });
 
 // 4. Reset Password
